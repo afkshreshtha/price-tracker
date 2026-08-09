@@ -1,69 +1,122 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
 
 export default function Home() {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [product, setProduct] = useState<any>(null);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setProduct(null);
+
+    try {
+      const res = await fetch("/api/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setProduct(data);
+      } else {
+        setError(data.message || "Failed to fetch product details.");
+      }
+    } catch (err) {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <main className="min-h-screen bg-black text-white selection:bg-zinc-800 font-sans p-6 md:p-24">
+      <div className="max-w-3xl mx-auto space-y-12">
+        {/* Header Section */}
+        <div className="space-y-4">
+          <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
+            Track Prices. <br />
+            <span className="text-zinc-500">Catch Fake Deals.</span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          {/* UPDATE THIS LINE: */}
+          <p className="text-zinc-400 text-lg max-w-xl">
+            Paste an Amazon or Flipkart link below. We bypass the marketing to
+            show you the real numbers and save it to your history.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        {/* Search Form */}
+        <form
+          onSubmit={handleSearch}
+          className="flex flex-col md:flex-row gap-4"
+        >
+          <input
+            type="url"
+            required
+            placeholder="Paste Amazon or Flipkart link here..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="flex-1 bg-zinc-950 border border-zinc-800 text-white px-6 py-4 rounded-lg focus:outline-none focus:border-white transition-colors"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-white text-black font-semibold px-8 py-4 rounded-lg hover:bg-zinc-200 transition-colors disabled:opacity-50"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            {loading ? "Scraping..." : "Analyze Deal"}
+          </button>
+        </form>
+
+        {/* Error State */}
+        {error && (
+          <div className="border border-red-900 bg-red-950/30 text-red-400 px-6 py-4 rounded-lg">
+            {error}
+          </div>
+        )}
+
+        {/* Result Card */}
+        {product && (
+          <div className="border border-zinc-800 rounded-xl p-8 space-y-6 bg-zinc-950/50 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-between items-start gap-4">
+              <h2 className="text-2xl font-semibold leading-snug">
+                {product.productName}
+              </h2>
+              {/* Discount Badge */}
+              <span className="bg-white text-black px-4 py-1 rounded-full text-sm font-bold whitespace-nowrap">
+                {product.claimedDiscount}
+              </span>
+            </div>
+
+            <div className="flex items-baseline gap-4">
+              <span className="text-5xl font-bold tracking-tight">
+                ₹{product.currentPrice.toLocaleString("en-IN")}
+              </span>
+              {product.originalPrice > product.currentPrice && (
+                <span className="text-xl text-zinc-500 line-through">
+                  ₹{product.originalPrice.toLocaleString("en-IN")}
+                </span>
+              )}
+            </div>
+
+            <div className="border-t border-zinc-800 pt-6">
+              <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+                About this item
+              </h3>
+              <p className="text-zinc-300 leading-relaxed text-sm">
+                {product.description.length > 300
+                  ? product.description.substring(0, 300) + "..."
+                  : product.description}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
   );
 }
