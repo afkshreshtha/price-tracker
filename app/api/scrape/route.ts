@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       defaultViewport: chromium.defaultViewport,
       // If local, point to your computer's actual Chrome installation. If Vercel, use the serverless path.
       executablePath: isLocal 
-        ? '"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"' 
+        ? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe' 
         : await chromium.executablePath(),
       // Let's keep it visible locally for debugging, but invisible in production
       headless: isLocal ? false : chromium.headless,

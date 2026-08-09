@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -11,7 +12,6 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    // 1. Fetch all existing products from Supabase
     const { data: products, error: fetchError } = await supabase
       .from('products')
       .select('id, url');
@@ -22,8 +22,22 @@ export async function GET(request: Request) {
 
     console.log(`Starting daily update for ${products.length} products...`);
 
-    // 2. Launch Puppeteer ONCE for the entire loop
-    const browser = await puppeteer.launch({ headless: true });
+    // ==========================================
+    // SERVERLESS-SAFE BROWSER LAUNCH
+    // ==========================================
+    const isLocal = process.env.NODE_ENV === 'development';
+    
+    const browser = await puppeteer.launch({
+      args: isLocal 
+        ? ["--disable-blink-features=AutomationControlled"] 
+        : [...chromium.args, "--disable-blink-features=AutomationControlled"],
+      defaultViewport: chromium.defaultViewport,
+      executablePath: isLocal 
+        ? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe' 
+        : await chromium.executablePath(),
+      headless: isLocal ? false : chromium.headless,
+    });
+
     const page = await browser.newPage();
     
     await page.emulate({
@@ -33,18 +47,47 @@ export async function GET(request: Request) {
 
     const newPrices = [];
 
-    // 3. Loop through each product and scrape the new price
-// 3. Loop through each product and scrape the new price
+    // ==========================================
+    // LOOP & SCRAPE LOGIC
+    // ==========================================
     for (const product of products) {
       try {
         await page.goto(product.url, { waitUntil: 'domcontentloaded' });
-        await page.waitForSelector('.a-price-whole', { timeout: 5000 });
         
-        const priceText = await page.$eval('.a-price-whole', (el: Element) => (el as HTMLElement).innerText);
-        const currentPrice = parseInt(priceText.replace(/,/g, ''), 10);
+        let currentPrice = 0;
 
-        // --- NEW OPTIMIZATION LOGIC ---
-        // Grab the most recent price from the database for this product
+        if (product.url.includes('amazon.in')) {
+          await page.waitForSelector('.a-price-whole', { timeout: 5000 });
+          const priceText = await page.$eval('.a-price-whole', (el: Element) => (el as HTMLElement).innerText);
+          currentPrice = parseInt(priceText.replace(/,/g, ''), 10);
+          
+        } else if (product.url.includes('flipkart.com')) {
+          await page.waitForSelector('h1', { timeout: 10000 });
+          const scrapedCurrent = await page.evaluate(() => {
+            let current = 0;
+            const allDivs = Array.from(document.querySelectorAll('div'));
+            const priceDivs = allDivs.filter(div => {
+              const text = div.innerText?.trim();
+              return text && text.startsWith('₹') && div.children.length === 0;
+            });
+            for (const div of priceDivs) {
+              const textValue = parseInt(div.innerText.replace(/[^\d]/g, ''), 10);
+              const style = window.getComputedStyle(div);
+              const inlineStyle = div.getAttribute('style') || '';
+              if (!(style.textDecorationLine.includes('line-through') || inlineStyle.includes('line-through'))) {
+                if (current === 0) current = textValue;
+              }
+            }
+            return current;
+          });
+          currentPrice = scrapedCurrent;
+        }
+
+        if (currentPrice === 0) throw new Error("Could not parse price.");
+
+        // ==========================================
+        // DELTA STORAGE OPTIMIZATION
+        // ==========================================
         const { data: lastPriceRecord } = await supabase
           .from('prices')
           .select('current_price')
@@ -53,7 +96,6 @@ export async function GET(request: Request) {
           .limit(1)
           .single();
 
-        // ONLY insert a new row if there is no previous price, OR if the price has changed!
         if (!lastPriceRecord || lastPriceRecord.current_price !== currentPrice) {
           newPrices.push({
             product_id: product.id,
@@ -61,16 +103,16 @@ export async function GET(request: Request) {
           });
           console.log(`✅ Price Changed! Updated: ${product.url} -> ₹${currentPrice}`);
         } else {
-          console.log(`➖ Price unchanged for: ${product.url}. Skipping database insert.`);
+          console.log(`➖ Price unchanged for: ${product.url}. Skipping.`);
         }
         
       } catch (err) {
         console.error(`❌ Failed to update ${product.url}`);
       }
     }
+    
     await browser.close();
 
-    // 4. Batch Insert all new prices at once (much faster than inserting one by one)
     if (newPrices.length > 0) {
       const { error: insertError } = await supabase
         .from('prices')
