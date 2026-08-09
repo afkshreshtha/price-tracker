@@ -1,14 +1,22 @@
 "use client";
 
-import { useState } from "react";
-
+import { useState, FormEvent } from "react";
+interface ProductData {
+  productName: string;
+  currentPrice: number;
+  originalPrice: number;
+  claimedDiscount: string;
+  description: string;
+}
 export default function Home() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [product, setProduct] = useState<any>(null);
+  // Now we use our Interface instead of 'any'
+  const [product, setProduct] = useState<ProductData | null>(null);
 
-  const handleSearch = async (e: React.FormEvent) => {
+  // Update the event type
+  const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError("");
@@ -34,7 +42,6 @@ export default function Home() {
       setLoading(false);
     }
   };
-
   return (
     <main className="min-h-screen bg-black text-white selection:bg-zinc-800 font-sans p-6 md:p-24">
       <div className="max-w-3xl mx-auto space-y-12">

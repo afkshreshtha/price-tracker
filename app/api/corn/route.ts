@@ -31,11 +31,11 @@ export async function GET(request: Request) {
       args: isLocal 
         ? ["--disable-blink-features=AutomationControlled"] 
         : [...chromium.args, "--disable-blink-features=AutomationControlled"],
-      defaultViewport: chromium.defaultViewport,
+      defaultViewport: { width: 1920, height: 1080 },
       executablePath: isLocal 
         ? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe' 
         : await chromium.executablePath(),
-      headless: isLocal ? false : chromium.headless,
+      headless: isLocal ? false : true,
     });
 
     const page = await browser.newPage();
