@@ -52,17 +52,17 @@ export async function POST(request: NextRequest) {
     // 2. SLOW PATH: Scrape Amazon (Only runs for new URLs)
     // ==========================================
     console.log("URL not found in DB. Launching scraper...");
-// Check if we are running locally via Next.js development server
-    const isLocal = process.env.NODE_ENV === 'development';
+    // Check if we are running locally via Next.js development server
+    const isLocal = process.env.NODE_ENV === "development";
 
     const browser = await puppeteer.launch({
-      args: isLocal 
-        ? ["--disable-blink-features=AutomationControlled"] 
+      args: isLocal
+        ? ["--disable-blink-features=AutomationControlled"]
         : [...chromium.args, "--disable-blink-features=AutomationControlled"],
       defaultViewport: { width: 1920, height: 1080 },
       // If local, point to your computer's actual Chrome installation. If Vercel, use the serverless path.
-      executablePath: isLocal 
-        ? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe' 
+      executablePath: isLocal
+        ? "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
         : await chromium.executablePath(),
       // Let's keep it visible locally for debugging, but invisible in production
       headless: isLocal ? false : true,
@@ -84,25 +84,55 @@ export async function POST(request: NextRequest) {
     // ==========================================
     // SCRAPING LOGIC: AMAZON VS FLIPKART
     // ==========================================
-    if (url.includes('amazon.in')) {
-          // --- AMAZON LOGIC ---
-          // 1. Give Vercel more time to render Amazon's heavy JS
-          // 2. Provide fallback selectors in case Amazon serves a different layout to Datacenter IPs
-          const amazonPriceSelectors = '.a-price-whole, .a-color-price, #priceblock_ourprice, #priceblock_dealprice';
-          
-          // Increased timeout from 5,000ms to 15,000ms
-          await page.waitForSelector(amazonPriceSelectors, { timeout: 15000 }); 
-          const priceText = await page.$eval(amazonPriceSelectors, (el: Element) => (el as HTMLElement).innerText);
-          currentPrice = parseInt(priceText.replace(/,/g, ''), 10);
+    if (url.includes("amazon.in")) {
+      // --- AMAZON ULTIMATE STEALTH LOGIC ---
 
-          titleText = await page.$eval('#productTitle', (el: Element) => (el as HTMLElement).innerText.trim());
+      // 1. Inject aggressive real-browser headers to bypass datacenter blocks
+      await page.setExtraHTTPHeaders({
+        "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "sec-ch-ua":
+          '"Not/A)Brand";v="99", "Google Chrome";v="115", "Chromium";v="115"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "document",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-site": "none",
+        "sec-fetch-user": "?1",
+        "upgrade-insecure-requests": "1",
+      });
 
-          try {
-            const mrpText = await page.$eval('.a-text-price span[aria-hidden="true"]', (el: Element) => (el as HTMLElement).innerText);
-            originalPrice = parseInt(mrpText.replace(/[^\d]/g, ''), 10);
-          } catch (e) {
-            originalPrice = currentPrice;
-          }
+      try {
+        const amazonPriceSelectors =
+          ".a-price-whole, .a-color-price, #priceblock_ourprice, #priceblock_dealprice";
+        await page.waitForSelector(amazonPriceSelectors, { timeout: 15000 });
+        const priceText = await page.$eval(
+          amazonPriceSelectors,
+          (el: Element) => (el as HTMLElement).innerText,
+        );
+        currentPrice = parseInt(priceText.replace(/,/g, ""), 10);
+
+        titleText = await page.$eval("#productTitle", (el: Element) =>
+          (el as HTMLElement).innerText.trim(),
+        );
+
+        try {
+          const mrpText = await page.$eval(
+            '.a-text-price span[aria-hidden="true"]',
+            (el: Element) => (el as HTMLElement).innerText,
+          );
+          originalPrice = parseInt(mrpText.replace(/[^\d]/g, ""), 10);
+        } catch (e) {
+          originalPrice = currentPrice;
+        }
+      } catch (timeoutError) {
+        // DEBUG MODE: If it times out, grab the page title to see what Amazon actually served
+        const pageTitle = await page.title();
+        throw new Error(
+          `Amazon Blocked Vercel! Page loaded as: "${pageTitle}". They know we are a bot.`,
+        );
+      }
     } else if (url.includes("flipkart.com")) {
       // --- FLIPKART LOGIC (CLASS-IMMUNE APPROACH) ---
 
