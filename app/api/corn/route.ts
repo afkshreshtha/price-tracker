@@ -57,7 +57,7 @@ export async function GET(request: Request) {
         let currentPrice = 0;
 
         if (product.url.includes('amazon.in')) {
-          await page.waitForSelector('.a-price-whole', { timeout: 5000 });
+          await page.waitForSelector('.a-price-whole', { timeout: 15000 });
           const priceText = await page.$eval('.a-price-whole', (el: Element) => (el as HTMLElement).innerText);
           currentPrice = parseInt(priceText.replace(/,/g, ''), 10);
           

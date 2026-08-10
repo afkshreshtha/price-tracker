@@ -84,28 +84,25 @@ export async function POST(request: NextRequest) {
     // ==========================================
     // SCRAPING LOGIC: AMAZON VS FLIPKART
     // ==========================================
-    if (url.includes("amazon.in")) {
-      // --- AMAZON LOGIC ---
-      await page.waitForSelector(".a-price-whole", { timeout: 5000 });
-      const priceText = await page.$eval(
-        ".a-price-whole",
-        (el) => (el as HTMLElement).innerText,
-      );
-      currentPrice = parseInt(priceText.replace(/,/g, ""), 10);
+    if (url.includes('amazon.in')) {
+          // --- AMAZON LOGIC ---
+          // 1. Give Vercel more time to render Amazon's heavy JS
+          // 2. Provide fallback selectors in case Amazon serves a different layout to Datacenter IPs
+          const amazonPriceSelectors = '.a-price-whole, .a-color-price, #priceblock_ourprice, #priceblock_dealprice';
+          
+          // Increased timeout from 5,000ms to 15,000ms
+          await page.waitForSelector(amazonPriceSelectors, { timeout: 15000 }); 
+          const priceText = await page.$eval(amazonPriceSelectors, (el: Element) => (el as HTMLElement).innerText);
+          currentPrice = parseInt(priceText.replace(/,/g, ''), 10);
 
-      titleText = await page.$eval("#productTitle", (el) =>
-        (el as HTMLElement).innerText.trim(),
-      );
+          titleText = await page.$eval('#productTitle', (el: Element) => (el as HTMLElement).innerText.trim());
 
-      try {
-        const mrpText = await page.$eval(
-          '.a-text-price span[aria-hidden="true"]',
-          (el) => (el as HTMLElement).innerText,
-        );
-        originalPrice = parseInt(mrpText.replace(/[^\d]/g, ""), 10);
-      } catch (e) {
-        originalPrice = currentPrice;
-      }
+          try {
+            const mrpText = await page.$eval('.a-text-price span[aria-hidden="true"]', (el: Element) => (el as HTMLElement).innerText);
+            originalPrice = parseInt(mrpText.replace(/[^\d]/g, ''), 10);
+          } catch (e) {
+            originalPrice = currentPrice;
+          }
     } else if (url.includes("flipkart.com")) {
       // --- FLIPKART LOGIC (CLASS-IMMUNE APPROACH) ---
 
